@@ -1,0 +1,10 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="ASPECT Dev Server" type="js.build_tools.npm" node-package="vite" application-parameters="--host 127.0.0.1" path-to-js-file="package.json" working-dir="$PROJECT_DIR$">
+    <package-json value="$PROJECT_DIR$/package.json" />
+    <command value="run" />
+    <scripts>
+      <script value="dev" />
+    </scripts>
+    <method v="2" />
+  </configuration>
+</component>
