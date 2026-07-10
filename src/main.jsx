@@ -13,6 +13,10 @@ const projects = [
 
 function Arrow() { return <span aria-hidden="true">↗</span> }
 
+function MailIcon() {
+  return <svg className="mail-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="5" width="18" height="14" rx="1" /><path d="m4 7 8 6 8-6" /></svg>
+}
+
 function Logo() {
   return <a className="logo" href="#top" aria-label="ASPECT home"><img src={imageUrl('aspect-logo.svg')} alt="ASPECT — Architecture and Design" width="112" height="103" /></a>
 }
@@ -149,7 +153,7 @@ function Home() {
     <ProjectShowcase />
     <section id="studio" className="studio section"><p className="eyebrow">The studio</p><div><h2>We design places that <em>belong.</em></h2><p>ASPECT is an architecture and design studio working across homes, hospitality, and cultural spaces. We believe the most resonant work begins with careful observation — of a site, a material, a way of living.</p><a className="text-link" href="#contact">Meet the studio <Arrow /></a></div></section>
     <section id="services" className="services section"><p className="eyebrow">What we do</p><div className="service-list">{['Architecture', 'Interior design', 'Creative direction'].map((name, index) => <div className="service" key={name}><span>{String(index + 1).padStart(2, '0')}</span><h3>{name}</h3><Arrow /></div>)}</div></section>
-    <section id="contact" className="contact"><p className="eyebrow">Start a conversation</p><h2>What will we shape together?</h2><a href="mailto:studio@aspect.am">studio@aspect.am <Arrow /></a><div><p>Yerevan, Armenia</p><p>© 2026 ASPECT</p><a href="#top">Back to top ↑</a></div></section>
+    <section id="contact" className="contact"><p className="eyebrow">Start a conversation</p><h2>What will we shape together?</h2><a className="contact-email" href="mailto:studio@aspect.am"><MailIcon /><span>studio@aspect.am <Arrow /></span></a><div><p>Yerevan, Armenia</p><p>© 2026 ASPECT</p><a href="#top">Back to top ↑</a></div></section>
   </main>
 }
 
