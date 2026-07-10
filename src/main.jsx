@@ -2,17 +2,19 @@ import { StrictMode, useCallback, useEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import './styles.css'
 
+const imageUrl = fileName => `${import.meta.env.BASE_URL}images/${fileName}`
+
 const projects = [
-  { slug: 'house-of-light', number: '01', name: 'House of Light', type: 'Residential · Yerevan', image: '/images/project-house-of-light.jpg' },
-  { slug: 'monumental-quiet', number: '02', name: 'Monumental Quiet', type: 'Cultural · Tbilisi', image: '/images/project-monumental-quiet.jpg' },
-  { slug: 'the-archive', number: '03', name: 'The Archive', type: 'Hospitality · Berlin', image: '/images/project-the-archive.jpg' },
-  { slug: 'horizon-house', number: '04', name: 'Horizon House', type: 'Residential · Puglia', image: '/images/project-horizon-house.jpg' },
+  { slug: 'house-of-light', number: '01', name: 'House of Light', type: 'Residential · Yerevan', image: imageUrl('project-house-of-light.jpg') },
+  { slug: 'monumental-quiet', number: '02', name: 'Monumental Quiet', type: 'Cultural · Tbilisi', image: imageUrl('project-monumental-quiet.jpg') },
+  { slug: 'the-archive', number: '03', name: 'The Archive', type: 'Hospitality · Berlin', image: imageUrl('project-the-archive.jpg') },
+  { slug: 'horizon-house', number: '04', name: 'Horizon House', type: 'Residential · Puglia', image: imageUrl('project-horizon-house.jpg') },
 ]
 
 function Arrow() { return <span aria-hidden="true">↗</span> }
 
 function Logo() {
-  return <a className="logo" href="#top" aria-label="ASPECT home"><img src="/images/aspect-logo.svg" alt="ASPECT — Architecture and Design" width="112" height="103" /></a>
+  return <a className="logo" href="#top" aria-label="ASPECT home"><img src={imageUrl('aspect-logo.svg')} alt="ASPECT — Architecture and Design" width="112" height="103" /></a>
 }
 
 function Header({ menuOpen, setMenuOpen }) {
@@ -139,7 +141,7 @@ function ProjectDetail({ project, onBack }) {
 function Home() {
   return <main id="top">
     <section className="hero" aria-labelledby="hero-title">
-      <img className="hero-image" src="/images/project-house-of-light-hero.jpg" alt="" fetchPriority="high" />
+      <img className="hero-image" src={imageUrl('project-house-of-light-hero.jpg')} alt="" fetchPriority="high" />
       <div className="hero-shade" />
       <div className="hero-copy"><div className="hero-overline"><i /> <span>Architecture and design</span> <i /></div><h1 id="hero-title">Spaces with<br /><em>lasting presence.</em></h1><p>We create considered environments that are rooted in place and made to endure.</p></div>
       <a className="scroll-cue" href="#work">Scroll to explore <span aria-hidden="true" /></a>
