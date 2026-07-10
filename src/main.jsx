@@ -149,7 +149,7 @@ function Home() {
     <ProjectShowcase />
     <section id="studio" className="studio section"><p className="eyebrow">The studio</p><div><h2>We design places that <em>belong.</em></h2><p>ASPECT is an architecture and design studio working across homes, hospitality, and cultural spaces. We believe the most resonant work begins with careful observation — of a site, a material, a way of living.</p><a className="text-link" href="#contact">Meet the studio <Arrow /></a></div></section>
     <section id="services" className="services section"><p className="eyebrow">What we do</p><div className="service-list">{['Architecture', 'Interior design', 'Creative direction', 'Objects & furniture'].map((name, index) => <div className="service" key={name}><span>{String(index + 1).padStart(2, '0')}</span><h3>{name}</h3><Arrow /></div>)}</div></section>
-    <section id="contact" className="contact"><p className="eyebrow">Start a conversation</p><h2>Have a place in mind?</h2><a href="mailto:studio@aspect.am">studio@aspect.am <Arrow /></a><div><p>Yerevan, Armenia</p><p>© 2026 ASPECT</p><a href="#top">Back to top ↑</a></div></section>
+    <section id="contact" className="contact"><p className="eyebrow">Start a conversation</p><h2>Have a project to carve?</h2><a href="mailto:studio@aspect.am">studio@aspect.am <Arrow /></a><div><p>Yerevan, Armenia</p><p>© 2026 ASPECT</p><a href="#top">Back to top ↑</a></div></section>
   </main>
 }
 
