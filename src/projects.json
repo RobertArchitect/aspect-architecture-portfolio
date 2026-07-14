@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "projects": [
+    {
+      "slug": "house-of-light",
+      "number": "01",
+      "name": "House of Light",
+      "type": "Residential · Yerevan",
+      "description": "Designed as a sequence of moments rather than a singular object, this project balances a clear architectural idea with the slow texture of its surroundings. Every threshold is considered; every view is framed.",
+      "completion": "2025",
+      "scope": "Architecture · Interiors",
+      "status": "Built",
+      "images": ["project-house-of-light.jpg"]
+    },
+    {
+      "slug": "monumental-quiet",
+      "number": "02",
+      "name": "Monumental Quiet",
+      "type": "Cultural · Tbilisi",
+      "description": "Designed as a sequence of moments rather than a singular object, this project balances a clear architectural idea with the slow texture of its surroundings. Every threshold is considered; every view is framed.",
+      "completion": "2025",
+      "scope": "Architecture · Interiors",
+      "status": "Built",
+      "images": ["project-monumental-quiet.jpg"]
+    },
+    {
+      "slug": "the-archive",
+      "number": "03",
+      "name": "The Archive",
+      "type": "Hospitality · Berlin",
+      "description": "Designed as a sequence of moments rather than a singular object, this project balances a clear architectural idea with the slow texture of its surroundings. Every threshold is considered; every view is framed.",
+      "completion": "2025",
+      "scope": "Architecture · Interiors",
+      "status": "Built",
+      "images": ["project-the-archive.jpg"]
+    },
+    {
+      "slug": "horizon-house",
+      "number": "04",
+      "name": "Horizon House",
+      "type": "Residential · Puglia",
+      "description": "Designed as a sequence of moments rather than a singular object, this project balances a clear architectural idea with the slow texture of its surroundings. Every threshold is considered; every view is framed.",
+      "completion": "2025",
+      "scope": "Architecture · Interiors",
+      "status": "Built",
+      "images": ["project-horizon-house.jpg"]
+    }
+  ]
+}
