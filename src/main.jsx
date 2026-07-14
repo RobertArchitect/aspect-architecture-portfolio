@@ -1,18 +1,40 @@
 import { StrictMode, useCallback, useEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
+import { onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth'
+import { auth, googleProvider } from './firebase'
 import {
-  PROJECT_STORAGE_KEY,
   defaultProjects,
   emptyProject,
   imageSource,
-  loadProjects,
   normaliseProjectDocument,
-  persistProjects,
   slugify,
 } from './projects'
+import {
+  deleteProjectFromFirestore,
+  deleteProjectImages,
+  firebaseErrorMessage,
+  replaceProjectsInFirestore,
+  subscribeToProjects,
+  uploadProjectImages,
+} from './project-store'
 import './styles.css'
 
+const repositoryPath = '/aspect-architecture-portfolio/'
 const imageUrl = fileName => `${import.meta.env.BASE_URL}images/${fileName}`
+
+function homePath() {
+  return window.location.pathname.startsWith(repositoryPath) ? repositoryPath : '/'
+}
+
+function homeLink(hash = '') {
+  return `${homePath()}${hash}`
+}
+
+function currentPageRoute() {
+  const recoveredRoute = new URLSearchParams(window.location.search).get('route')
+  const path = (recoveredRoute || window.location.pathname).replace(/\/+$/, '') || '/'
+  return path === '/admin' || path.endsWith('/admin') || window.location.hash === '#admin' ? 'admin' : 'home'
+}
 
 function Arrow() { return <span aria-hidden="true">↗</span> }
 
@@ -20,45 +42,62 @@ function MailIcon() {
   return <svg className="mail-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="5" width="18" height="14" rx="1" /><path d="m4 7 8 6 8-6" /></svg>
 }
 
+function GoogleIcon() {
+  return <svg className="google-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285f4" d="M21.8 12.23c0-.73-.07-1.43-.2-2.1H12v3.98h5.5a4.71 4.71 0 0 1-2.04 3.1v2.58h3.32c1.94-1.78 3.02-4.4 3.02-7.56Z" /><path fill="#34a853" d="M12 22c2.75 0 5.06-.91 6.75-2.47l-3.32-2.58c-.92.62-2.1.99-3.43.99-2.64 0-4.88-1.78-5.68-4.18H2.9v2.66A10.19 10.19 0 0 0 12 22Z" /><path fill="#fbbc05" d="M6.32 13.76a6.13 6.13 0 0 1 0-3.52V7.58H2.9a10.02 10.02 0 0 0 0 8.84l3.42-2.66Z" /><path fill="#ea4335" d="M12 6.06c1.5 0 2.85.52 3.91 1.53l2.94-2.94C17.05 2.97 14.75 2 12 2a10.19 10.19 0 0 0-9.1 5.58l3.42 2.66C7.12 7.84 9.36 6.06 12 6.06Z" /></svg>
+}
+
 function Logo() {
-  return <a className="logo" href="#top" aria-label="ASPECT home"><img src={imageUrl('aspect-logo.svg')} alt="ASPECT — Architecture and Design" width="112" height="103" /></a>
+  return <a className="logo" href={homeLink()} aria-label="ASPECT home"><img src={imageUrl('aspect-logo.svg')} alt="ASPECT — Architecture and Design" width="112" height="103" /></a>
 }
 
 function Header({ menuOpen, setMenuOpen }) {
+  const closeMenu = () => setMenuOpen(false)
+
   return <header>
     <Logo />
-    <button className="menu" onClick={() => setMenuOpen(!menuOpen)} aria-expanded={menuOpen} aria-controls="site-nav"><span>{menuOpen ? 'Close' : 'Menu'}</span><b /></button>
+    <button className="menu" type="button" onClick={() => setMenuOpen(!menuOpen)} aria-expanded={menuOpen} aria-controls="site-nav"><span>{menuOpen ? 'Close' : 'Menu'}</span><b /></button>
     <nav id="site-nav" className={menuOpen ? 'open' : ''} aria-label="Primary">
-      <a href="#top">Home</a><a href="#studio">About</a><a href="#services">Services</a><a href="#work">Portfolio</a>
+      <a href={homeLink()} onClick={closeMenu}>Home</a><a href={homeLink('#studio')} onClick={closeMenu}>About</a><a href={homeLink('#services')} onClick={closeMenu}>Services</a><a href={homeLink('#work')} onClick={closeMenu}>Portfolio</a>
     </nav>
-    <a className="header-cta" href="#contact">Start a project</a>
+    <a className="header-cta" href={homeLink('#contact')}>Start a project</a>
   </header>
 }
 
-function useManagedProjects() {
-  const [projects, setProjects] = useState(loadProjects)
+function useFirestoreProjects() {
+  const [projects, setProjects] = useState(defaultProjects)
+  const [state, setState] = useState({ source: 'loading', error: '' })
 
-  const replaceProjects = useCallback(nextProjects => {
-    const normalised = normaliseProjectDocument(nextProjects).projects
-    const persisted = persistProjects(normalised)
-    setProjects(normalised)
-    return persisted
-  }, [])
+  useEffect(() => subscribeToProjects(
+    remoteProjects => {
+      setProjects(remoteProjects)
+      setState({ source: 'firestore', error: '' })
+    },
+    () => {
+      setProjects(defaultProjects)
+      setState({ source: 'seed-needed', error: '' })
+    },
+    error => {
+      setProjects(defaultProjects)
+      setState({ source: 'error', error: firebaseErrorMessage(error) })
+    },
+  ), [])
 
-  useEffect(() => {
-    const syncProjects = event => {
-      if (event.key !== PROJECT_STORAGE_KEY) return
-      try {
-        setProjects(event.newValue ? normaliseProjectDocument(JSON.parse(event.newValue)).projects : defaultProjects)
-      } catch {
-        setProjects(defaultProjects)
-      }
-    }
-    window.addEventListener('storage', syncProjects)
-    return () => window.removeEventListener('storage', syncProjects)
-  }, [])
+  return [projects, state]
+}
 
-  return [projects, replaceProjects]
+function useFirebaseUser() {
+  const [user, setUser] = useState(undefined)
+  const [error, setError] = useState('')
+
+  useEffect(() => onAuthStateChanged(auth, nextUser => {
+    setUser(nextUser)
+    setError('')
+  }, nextError => {
+    setUser(null)
+    setError(firebaseErrorMessage(nextError))
+  }), [])
+
+  return { user, error, setError }
 }
 
 function ProjectImage({ project, image, className = '', priority = false, render = true }) {
@@ -164,14 +203,14 @@ function ProjectShowcase({ projects }) {
           <div className="showcase-content"><p className="eyebrow">{project.type}</p><h2>{project.name}</h2><a href={`#project/${project.slug}`} tabIndex={index === safeActiveIndex ? 0 : -1}>Explore project <Arrow /></a></div>
         </article>)}
       </div>
-      <div className="showcase-controls"><button onClick={() => goToProject(safeActiveIndex - 1)} disabled={safeActiveIndex === 0} aria-label="Previous project">←</button><button onClick={() => goToProject(safeActiveIndex + 1)} disabled={safeActiveIndex === projects.length - 1} aria-label="Next project">→</button></div>
+      <div className="showcase-controls"><button type="button" onClick={() => goToProject(safeActiveIndex - 1)} disabled={safeActiveIndex === 0} aria-label="Previous project">←</button><button type="button" onClick={() => goToProject(safeActiveIndex + 1)} disabled={safeActiveIndex === projects.length - 1} aria-label="Next project">→</button></div>
     </div>
   </section>
 }
 
 function ProjectDetail({ project, onBack }) {
   return <main className="detail">
-    <button className="back" onClick={onBack}>← All projects</button>
+    <button className="back" type="button" onClick={onBack}>← All projects</button>
     <div className="detail-intro"><p className="eyebrow">{project.type}</p><h1>{project.name}</h1><p>Architecture shaped by atmosphere, material honesty, and the rituals of everyday life.</p></div>
     <ProjectImage project={project} className="detail-image" priority />
     {project.images.length > 1 && <div className="detail-gallery" aria-label={`${project.name} additional images`}>{project.images.slice(1).map((image, index) => <ProjectImage project={project} image={image} className="detail-gallery-image" key={`${image}-${index}`} />)}</div>}
@@ -179,20 +218,25 @@ function ProjectDetail({ project, onBack }) {
   </main>
 }
 
-function readImage(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(reader.result)
-    reader.onerror = () => reject(new Error(`Could not read ${file.name}.`))
-    reader.readAsDataURL(file)
-  })
+function AdminSignIn({ authError, onSignIn, signingIn }) {
+  return <main className="admin" id="top">
+    <section className="admin-intro"><p className="eyebrow">Portfolio editor</p><h1>Project <em>admin.</em></h1><p>Project publishing is secured by Google sign-in and Firebase Security Rules.</p></section>
+    <section className="admin-auth-card" aria-labelledby="admin-sign-in-heading">
+      <p className="eyebrow">Secure access</p><h2 id="admin-sign-in-heading">Sign in to manage the portfolio.</h2>
+      <p>Use the Google account authorised in the Firebase Security Rules. Accounts outside that allowlist can sign in but Firebase will reject every write.</p>
+      <button className="admin-primary google-sign-in" type="button" onClick={onSignIn} disabled={signingIn}><GoogleIcon />{signingIn ? 'Opening Google…' : 'Continue with Google'}</button>
+      {authError && <p className="admin-message" role="alert">{authError}</p>}
+    </section>
+  </main>
 }
 
-function AdminPage({ projects, onProjectsChange }) {
+function AdminPage({ projects, syncState, user, authError, setAuthError }) {
   const [editingSlug, setEditingSlug] = useState(null)
   const [draft, setDraft] = useState(emptyProject)
   const [notice, setNotice] = useState('Select a project to edit it, or add a new one.')
   const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [signingIn, setSigningIn] = useState(false)
 
   const isEditing = editingSlug !== null
   const selectProject = project => {
@@ -205,7 +249,7 @@ function AdminPage({ projects, onProjectsChange }) {
     setEditingSlug(null)
     setDraft(emptyProject())
     setError('')
-    setNotice('Add the project details, then save to publish it to the portfolio in this browser.')
+    setNotice('Add the project details, then publish them for every visitor.')
   }
   const updateField = event => {
     const { name, value } = event.target
@@ -215,93 +259,108 @@ function AdminPage({ projects, onProjectsChange }) {
   const addImageReference = () => setDraft(current => ({ ...current, images: [...current.images, ''] }))
   const removeImage = index => setDraft(current => ({ ...current, images: current.images.filter((_, imageIndex) => imageIndex !== index) }))
 
+  const signIn = async () => {
+    setSigningIn(true)
+    setAuthError('')
+    try {
+      await signInWithPopup(auth, googleProvider)
+    } catch (signInError) {
+      setAuthError(firebaseErrorMessage(signInError))
+    } finally {
+      setSigningIn(false)
+    }
+  }
+
   const addUploadedImages = async event => {
     const input = event.target
     const files = [...input.files]
     if (!files.length) return
+    setSaving(true)
     try {
-      const images = await Promise.all(files.map(readImage))
+      const images = await uploadProjectImages(files, draft.slug || draft.name)
       setDraft(current => ({ ...current, images: [...current.images.filter(Boolean), ...images] }))
       setError('')
-      setNotice(`${images.length} image${images.length === 1 ? '' : 's'} added to this project.`)
+      setNotice(`${images.length} image${images.length === 1 ? '' : 's'} uploaded. Publish the project to make the change live.`)
     } catch (uploadError) {
-      setError(uploadError.message)
+      setError(firebaseErrorMessage(uploadError))
     } finally {
       input.value = ''
+      setSaving(false)
     }
   }
 
-  const saveProject = event => {
+  const saveProject = async event => {
     event.preventDefault()
     const nextDraft = { ...draft, slug: slugify(draft.slug || draft.name), images: draft.images.filter(Boolean) }
+    const previousProject = projects.find(project => project.slug === editingSlug)
     const nextProjects = isEditing ? projects.map(project => project.slug === editingSlug ? nextDraft : project) : [...projects, nextDraft]
+
+    setSaving(true)
     try {
       const normalised = normaliseProjectDocument(nextProjects).projects
       const savedProject = normalised.find(project => project.slug === nextDraft.slug)
-      const persisted = onProjectsChange(normalised)
+      await replaceProjectsInFirestore(normalised)
+      const removedImages = previousProject ? previousProject.images.filter(image => !savedProject.images.includes(image)) : []
+      await deleteProjectImages(removedImages)
       setEditingSlug(savedProject.slug)
       setDraft(savedProject)
       setError('')
-      setNotice(persisted ? `${savedProject.name} is saved and live in this browser.` : `${savedProject.name} is visible, but browser storage is full. Export it before reloading.`)
-    } catch (validationError) {
-      setError(validationError.message)
+      setNotice(`${savedProject.name} is published and visible to every visitor.`)
+    } catch (saveError) {
+      setError(firebaseErrorMessage(saveError))
+    } finally {
+      setSaving(false)
     }
   }
 
-  const removeProject = () => {
+  const seedExistingProjects = async () => {
+    setSaving(true)
+    try {
+      await replaceProjectsInFirestore(defaultProjects)
+      setError('')
+      setNotice('The original four projects are now seeded in Firestore for every visitor.')
+    } catch (seedError) {
+      setError(firebaseErrorMessage(seedError))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const removeProject = async () => {
     const project = projects.find(item => item.slug === editingSlug)
     if (!project || !window.confirm(`Remove “${project.name}” from the portfolio?`)) return
-    const persisted = onProjectsChange(projects.filter(item => item.slug !== editingSlug))
-    setEditingSlug(null)
-    setDraft(emptyProject())
-    setError('')
-    setNotice(persisted ? `${project.name} was removed.` : `${project.name} was removed for this session, but browser storage is unavailable.`)
-  }
-
-  const exportProjects = () => {
-    const blob = new Blob([JSON.stringify(normaliseProjectDocument(projects), null, 2)], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const download = document.createElement('a')
-    download.href = url
-    download.download = 'projects.json'
-    document.body.append(download)
-    download.click()
-    download.remove()
-    URL.revokeObjectURL(url)
-    setNotice('projects.json downloaded. Import it later or replace src/projects.json before committing to publish it for everyone.')
-  }
-
-  const importProjects = async event => {
-    const input = event.target
-    const [file] = input.files
-    if (!file) return
+    setSaving(true)
     try {
-      const imported = normaliseProjectDocument(JSON.parse(await file.text())).projects
-      const persisted = onProjectsChange(imported)
+      await deleteProjectFromFirestore(project)
       setEditingSlug(null)
       setDraft(emptyProject())
       setError('')
-      setNotice(persisted ? `Imported ${imported.length} project${imported.length === 1 ? '' : 's'} and saved them locally.` : `Imported ${imported.length} project${imported.length === 1 ? '' : 's'}, but browser storage is unavailable.`)
-    } catch (importError) {
-      setError(importError.message || 'Could not import that projects.json file.')
+      setNotice(`${project.name} was removed from the live portfolio.`)
+    } catch (removeError) {
+      setError(firebaseErrorMessage(removeError))
     } finally {
-      input.value = ''
+      setSaving(false)
     }
   }
 
+  if (user === undefined) return <main className="admin" id="top"><section className="admin-intro"><p className="eyebrow">Portfolio editor</p><h1>Checking <em>access.</em></h1></section></main>
+  if (!user) return <AdminSignIn authError={authError} onSignIn={signIn} signingIn={signingIn} />
+
   return <main className="admin" id="top">
-    <section className="admin-intro"><p className="eyebrow">Portfolio editor</p><h1>Project <em>admin.</em></h1><p>Create and update portfolio projects in this browser. The public showcase and project pages reflect every saved edit immediately.</p></section>
-    <section className="admin-toolbar" aria-label="Project administration actions"><button className="admin-primary" onClick={startNewProject}>Add project <Arrow /></button><button className="admin-button" onClick={exportProjects}>Export projects.json</button><label className="admin-button upload-button">Import projects.json<input type="file" accept="application/json,.json" onChange={importProjects} /></label></section>
-    <p className="admin-persistence">Edits are saved in this browser with localStorage. Export to make a portable <code>projects.json</code> backup; replace <code>src/projects.json</code> with that file and deploy to publish it for all visitors.</p>
-    <div className="admin-layout">
-      <aside className="admin-project-list" aria-label="Projects"><div><p className="eyebrow">Projects</p><span>{projects.length}</span></div>{projects.length ? projects.map(project => <button className={project.slug === editingSlug ? 'active' : ''} onClick={() => selectProject(project)} aria-pressed={project.slug === editingSlug} key={project.slug}><small>{project.number}</small><strong>{project.name}</strong><em>{project.type}</em></button>) : <p className="admin-empty">No projects yet. Add one to begin.</p>}</aside>
+    <section className="admin-intro"><p className="eyebrow">Portfolio editor</p><h1>Project <em>admin.</em></h1><p>Signed in as <strong>{user.email}</strong>. Firebase Security Rules, not this page, determine whether your account may publish changes.</p><button className="admin-sign-out" type="button" onClick={() => signOut(auth)}>Sign out</button></section>
+    {syncState.source === 'seed-needed' && <section className="admin-seed" aria-label="Seed Firestore"><p><strong>Firestore is empty.</strong> Seed the four existing projects once to make the public site read its data from the shared collection.</p><button className="admin-primary" type="button" onClick={seedExistingProjects} disabled={saving}>Seed original projects <Arrow /></button></section>}
+    {syncState.error && <p className="admin-message" role="alert">{syncState.error}</p>}
+    <section className="admin-toolbar" aria-label="Project administration actions"><button className="admin-primary" type="button" onClick={startNewProject} disabled={saving}>Add project <Arrow /></button></section>
+    <p className="admin-persistence">Every published edit is written to Cloud Firestore. Uploads are stored in Firebase Storage; no project changes are saved in this browser.</p>
+    <div className="admin-layout" aria-busy={saving}>
+      <aside className="admin-project-list" aria-label="Projects"><div><p className="eyebrow">Projects</p><span>{projects.length}</span></div>{projects.length ? projects.map(project => <button className={project.slug === editingSlug ? 'active' : ''} type="button" onClick={() => selectProject(project)} aria-pressed={project.slug === editingSlug} key={project.slug}><small>{project.number}</small><strong>{project.name}</strong><em>{project.type}</em></button>) : <p className="admin-empty">No projects yet. Add one to begin.</p>}</aside>
       <section className="admin-editor" aria-live="polite">
-        <div className="admin-editor-heading"><div><p className="eyebrow">{isEditing ? 'Editing project' : 'New project'}</p><h2>{isEditing ? draft.name || 'Untitled project' : 'Add a project'}</h2></div>{isEditing && <button className="admin-delete" onClick={removeProject}>Remove project</button>}</div>
+        <div className="admin-editor-heading"><div><p className="eyebrow">{isEditing ? 'Editing project' : 'New project'}</p><h2>{isEditing ? draft.name || 'Untitled project' : 'Add a project'}</h2></div>{isEditing && <button className="admin-delete" type="button" onClick={removeProject} disabled={saving}>Remove project</button>}</div>
         <p className="admin-message" role={error ? 'alert' : 'status'}>{error || notice}</p>
         <form onSubmit={saveProject}>
-          <div className="admin-fields"><label>Project header<input name="name" value={draft.name} onChange={updateField} placeholder="House of Light" required /></label><label>Slug<input name="slug" value={draft.slug} onChange={updateField} placeholder="house-of-light" pattern="[a-z0-9\-]+" aria-describedby="slug-help" required={Boolean(draft.slug)} /></label><p className="field-help" id="slug-help">Leave blank to create a slug from the header. Slugs must be unique.</p><label>Type / eyebrow<input name="type" value={draft.type} onChange={updateField} placeholder="Residential · Yerevan" required /></label><label className="admin-field-wide">Project brief<textarea name="description" value={draft.description} onChange={updateField} rows="5" placeholder="Describe the project, its material, and intent." required /></label><label>Completion<input name="completion" value={draft.completion} onChange={updateField} placeholder="2025" required /></label><label>Scope<input name="scope" value={draft.scope} onChange={updateField} placeholder="Architecture · Interiors" required /></label><label>Status<input name="status" value={draft.status} onChange={updateField} placeholder="Built" required /></label></div>
-          <fieldset className="admin-images"><legend>Project images</legend><p>Use a filename from <code>public/images</code>, a full image URL, or upload an image to store it in the exported JSON.</p>{draft.images.map((image, index) => <div className="admin-image-row" key={`${index}-${image.slice(0, 24)}`}><label>Image {index + 1}<input value={image} onChange={event => updateImage(index, event.target.value)} placeholder="project-house-of-light.jpg" required={index === 0} /></label>{image && <img src={imageSource(image)} alt={`Preview ${index + 1}`} />}{draft.images.length > 1 && <button type="button" className="admin-image-remove" onClick={() => removeImage(index)} aria-label={`Remove image ${index + 1}`}>Remove</button>}</div>)}<div className="admin-image-actions"><button type="button" className="admin-button" onClick={addImageReference}>Add image reference</button><label className="admin-button upload-button">Upload image<input type="file" accept="image/*" multiple onChange={addUploadedImages} /></label></div></fieldset>
-          <div className="admin-form-actions"><button className="admin-primary" type="submit">{isEditing ? 'Save changes' : 'Create project'} <Arrow /></button><button className="admin-button" type="button" onClick={startNewProject}>Clear form</button></div>
+          <div className="admin-fields"><label>Project header<input name="name" value={draft.name} onChange={updateField} placeholder="House of Light" required disabled={saving} /></label><label>Slug<input name="slug" value={draft.slug} onChange={updateField} placeholder="house-of-light" pattern="[a-z0-9\-]+" aria-describedby="slug-help" required={Boolean(draft.slug)} disabled={saving} /></label><p className="field-help" id="slug-help">Leave blank to create a slug from the header. Slugs must be unique.</p><label>Type / eyebrow<input name="type" value={draft.type} onChange={updateField} placeholder="Residential · Yerevan" required disabled={saving} /></label><label className="admin-field-wide">Project brief<textarea name="description" value={draft.description} onChange={updateField} rows="5" placeholder="Describe the project, its material, and intent." required disabled={saving} /></label><label>Completion<input name="completion" value={draft.completion} onChange={updateField} placeholder="2025" required disabled={saving} /></label><label>Scope<input name="scope" value={draft.scope} onChange={updateField} placeholder="Architecture · Interiors" required disabled={saving} /></label><label>Status<input name="status" value={draft.status} onChange={updateField} placeholder="Built" required disabled={saving} /></label></div>
+          <fieldset className="admin-images" disabled={saving}><legend>Project images</legend><p>Upload images directly to Firebase Storage, or add a full image URL or one of the original files from <code>public/images</code>.</p>{draft.images.map((image, index) => <div className="admin-image-row" key={`${index}-${image.slice(0, 24)}`}><label>Image {index + 1}<input value={image} onChange={event => updateImage(index, event.target.value)} placeholder="project-house-of-light.jpg" required={index === 0} /></label>{image && <img src={imageSource(image)} alt={`Preview ${index + 1}`} />}{draft.images.length > 1 && <button type="button" className="admin-image-remove" onClick={() => removeImage(index)} aria-label={`Remove image ${index + 1}`}>Remove</button>}</div>)}<div className="admin-image-actions"><button type="button" className="admin-button" onClick={addImageReference}>Add image URL</button><label className="admin-button upload-button">Upload image<input type="file" accept="image/*" multiple onChange={addUploadedImages} /></label></div></fieldset>
+          <div className="admin-form-actions"><button className="admin-primary" type="submit" disabled={saving}>{saving ? 'Publishing…' : isEditing ? 'Save changes' : 'Create project'} <Arrow /></button><button className="admin-button" type="button" onClick={startNewProject} disabled={saving}>Clear form</button></div>
         </form>
       </section>
     </div>
@@ -325,23 +384,32 @@ function Home({ projects }) {
 
 function App() {
   const [menuOpen, setMenuOpen] = useState(false)
-  const [projects, replaceProjects] = useManagedProjects()
-  const [route, setRoute] = useState(() => window.location.hash.slice(1))
-  const isAdmin = route === 'admin'
-  const slug = route.startsWith('project/') ? route.split('/')[1] : null
+  const [projects, syncState] = useFirestoreProjects()
+  const { user, error: authError, setError: setAuthError } = useFirebaseUser()
+  const [pageRoute, setPageRoute] = useState(currentPageRoute)
+  const [hashRoute, setHashRoute] = useState(() => window.location.hash.slice(1))
+  const isAdmin = pageRoute === 'admin'
+  const slug = !isAdmin && hashRoute.startsWith('project/') ? hashRoute.split('/')[1] : null
   const project = projects.find(item => item.slug === slug)
 
   useEffect(() => {
-    const updateRoute = () => setRoute(window.location.hash.slice(1))
+    const updateRoute = () => {
+      setPageRoute(currentPageRoute())
+      setHashRoute(window.location.hash.slice(1))
+    }
     window.addEventListener('hashchange', updateRoute)
-    return () => window.removeEventListener('hashchange', updateRoute)
+    window.addEventListener('popstate', updateRoute)
+    return () => {
+      window.removeEventListener('hashchange', updateRoute)
+      window.removeEventListener('popstate', updateRoute)
+    }
   }, [])
   useEffect(() => {
     document.title = isAdmin ? 'Project admin — ASPECT' : project ? `${project.name} — ASPECT` : 'ASPECT — Architecture and Design'
     if (project || isAdmin) window.scrollTo(0, 0)
   }, [isAdmin, project])
 
-  return <><Header menuOpen={menuOpen} setMenuOpen={setMenuOpen} />{isAdmin ? <AdminPage projects={projects} onProjectsChange={replaceProjects} /> : project ? <ProjectDetail project={project} onBack={() => { window.location.hash = 'work' }} /> : <Home projects={projects} />}</>
+  return <><Header menuOpen={menuOpen} setMenuOpen={setMenuOpen} />{isAdmin ? <AdminPage projects={projects} syncState={syncState} user={user} authError={authError} setAuthError={setAuthError} /> : project ? <ProjectDetail project={project} onBack={() => { window.location.hash = 'work' }} /> : <Home projects={projects} />}</>
 }
 
 createRoot(document.getElementById('root')).render(<StrictMode><App /></StrictMode>)

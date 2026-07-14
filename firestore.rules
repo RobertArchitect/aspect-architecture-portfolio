@@ -1,0 +1,54 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // The allowlist is evaluated by Firebase on every write; this is not a
+    // client-side UI check.
+    function isAdmin() {
+      return request.auth != null
+        && request.auth.token.email in ['robertarch9@gmail.com'];
+    }
+
+    function isValidProject() {
+      return request.resource.data.keys().hasOnly([
+          'slug', 'name', 'type', 'description', 'completion', 'scope',
+          'status', 'images', 'sortOrder', 'updatedAt'
+        ])
+        && request.resource.data.keys().hasAll([
+          'slug', 'name', 'type', 'description', 'completion', 'scope',
+          'status', 'images', 'sortOrder', 'updatedAt'
+        ])
+        && request.resource.data.slug is string
+        && request.resource.data.name is string
+        && request.resource.data.type is string
+        && request.resource.data.description is string
+        && request.resource.data.completion is string
+        && request.resource.data.scope is string
+        && request.resource.data.status is string
+        && request.resource.data.images is list
+        && request.resource.data.images.size() > 0
+        && request.resource.data.images.size() <= 12
+        && request.resource.data.sortOrder is int
+        && request.resource.data.sortOrder > 0
+        && request.resource.data.updatedAt is timestamp
+        && request.resource.data.slug.size() > 0
+        && request.resource.data.slug.size() <= 120
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 160
+        && request.resource.data.description.size() > 0
+        && request.resource.data.description.size() <= 6000;
+    }
+
+    match /projects/{projectId} {
+      allow read: if true;
+      allow create, update: if isAdmin()
+        && isValidProject()
+        && request.resource.data.slug == projectId;
+      allow delete: if isAdmin();
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

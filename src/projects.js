@@ -1,7 +1,5 @@
 import defaultProjectDocument from './projects.json'
 
-export const PROJECT_STORAGE_KEY = 'aspect-projects-v1'
-
 const requiredFields = ['name', 'type', 'description', 'completion', 'scope', 'status']
 
 const asString = value => typeof value === 'string' ? value.trim() : ''
@@ -70,24 +68,11 @@ export function normaliseProjectDocument(input) {
 
 export const defaultProjects = normaliseProjectDocument(defaultProjectDocument).projects
 
-export function loadProjects() {
-  if (typeof window === 'undefined') return defaultProjects
-
-  try {
-    const stored = window.localStorage.getItem(PROJECT_STORAGE_KEY)
-    return stored ? normaliseProjectDocument(JSON.parse(stored)).projects : defaultProjects
-  } catch {
-    return defaultProjects
-  }
-}
-
-export function persistProjects(projects) {
-  try {
-    window.localStorage.setItem(PROJECT_STORAGE_KEY, JSON.stringify(normaliseProjectDocument(projects)))
-    return true
-  } catch {
-    return false
-  }
+export function firestoreProjects(projects) {
+  return normaliseProjectDocument(projects).projects.map(({ number: _number, ...project }, index) => ({
+    ...project,
+    sortOrder: index + 1,
+  }))
 }
 
 export function imageSource(image) {

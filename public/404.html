@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="robots" content="noindex" />
+    <script>
+      (function () {
+        var repositoryPath = '/aspect-architecture-portfolio/'
+        var currentPath = window.location.pathname
+        var basePath = currentPath.indexOf(repositoryPath) === 0 ? repositoryPath : '/'
+        var route = currentPath.slice(basePath.length)
+        var destination = basePath + '?route=' + encodeURIComponent('/' + route) + window.location.hash
+        window.location.replace(destination)
+      }())
+    </script>
+  </head>
+  <body></body>
+</html>

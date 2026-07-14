@@ -1,0 +1,24 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    // The allowlist is evaluated by Firebase on every upload, update, and
+    // deletion; this is not a client-side UI check.
+    function isAdmin() {
+      return request.auth != null
+        && request.auth.token.email in ['robertarch9@gmail.com'];
+    }
+
+    match /projects/{projectId}/{fileName} {
+      allow read: if true;
+      allow create, update: if isAdmin()
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+      allow delete: if isAdmin();
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
