@@ -105,107 +105,125 @@ function ProjectImage({ project, image, className = '', priority = false, render
   return render ? <img className={`project-image ${className}`} src={imageSource(source)} alt={`${project.name} project`} loading={priority ? 'eager' : 'lazy'} /> : <div className={`project-image project-placeholder ${className}`} aria-hidden="true" />
 }
 
-function ProjectShowcase({ projects }) {
-  const [activeIndex, setActiveIndex] = useState(0)
-  const scrollerRef = useRef(null)
-  const galleryRef = useRef(null)
-  const scrollTarget = useRef(0)
-  const scrollFrame = useRef(null)
-  const galleryCaptured = useRef(false)
-  const safeActiveIndex = Math.min(activeIndex, Math.max(projects.length - 1, 0))
-
-  const goToProject = useCallback(index => {
-    const scroller = scrollerRef.current
-    if (!scroller || !projects.length) return
-    const boundedIndex = Math.max(0, Math.min(projects.length - 1, index))
-    scrollTarget.current = scroller.clientWidth * boundedIndex
-    scroller.scrollTo({ left: scroller.clientWidth * boundedIndex, behavior: 'smooth' })
-  }, [projects.length])
+function useReducedMotionPreference() {
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(() => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false)
 
   useEffect(() => {
-    const scroller = scrollerRef.current
-    if (!scroller) return undefined
-    const updateIndex = () => {
-      if (!scrollFrame.current) scrollTarget.current = scroller.scrollLeft
-      setActiveIndex(Math.round(scroller.scrollLeft / scroller.clientWidth))
-    }
-    scroller.addEventListener('scroll', updateIndex, { passive: true })
-    return () => scroller.removeEventListener('scroll', updateIndex)
+    const mediaQuery = window.matchMedia?.('(prefers-reduced-motion: reduce)')
+    if (!mediaQuery) return undefined
+    const updatePreference = event => setPrefersReducedMotion(event.matches)
+    updatePreference(mediaQuery)
+    mediaQuery.addEventListener('change', updatePreference)
+    return () => mediaQuery.removeEventListener('change', updatePreference)
   }, [])
 
+  return prefersReducedMotion
+}
+
+function ProjectCarousel({ projects }) {
+  const projectCount = projects.length
+  const [activeIndex, setActiveIndex] = useState(0)
+  const [renderedIndex, setRenderedIndex] = useState(() => projectCount > 1 ? 1 : 0)
+  const [isPaused, setIsPaused] = useState(false)
+  const [transitionEnabled, setTransitionEnabled] = useState(false)
+  const activeIndexRef = useRef(0)
+  const renderedIndexRef = useRef(projectCount > 1 ? 1 : 0)
+  const moveInProgress = useRef(false)
+  const resetFrame = useRef(null)
+  const prefersReducedMotion = useReducedMotionPreference()
+  const safeActiveIndex = Math.min(activeIndex, Math.max(projectCount - 1, 0))
+  const isLooping = projectCount > 1
+
   useEffect(() => {
-    const handleWheel = event => {
-      const gallery = galleryRef.current
-      const scroller = scrollerRef.current
-      if (!gallery || !scroller || !projects.length) return
-      const movement = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY
-      if (Math.abs(movement) < 2) return
-      const rect = gallery.getBoundingClientRect()
-      const galleryIsNear = rect.top < window.innerHeight * 0.25 && rect.bottom > window.innerHeight * 0.75
-      const maximumScroll = scroller.scrollWidth - scroller.clientWidth
-      const atStart = scrollTarget.current <= 1 && scroller.scrollLeft <= 1
-      const atEnd = scrollTarget.current >= maximumScroll - 1 && scroller.scrollLeft >= maximumScroll - 1
+    if (prefersReducedMotion) return undefined
+    const frame = window.requestAnimationFrame(() => setTransitionEnabled(true))
+    return () => window.cancelAnimationFrame(frame)
+  }, [prefersReducedMotion])
 
-      if (!galleryCaptured.current) {
-        if (!galleryIsNear || (movement < 0 && atStart) || (movement > 0 && atEnd)) return
-        galleryCaptured.current = true
-        event.preventDefault()
-        if (Math.abs(rect.top) > 2) {
-          window.scrollTo({ top: window.scrollY + rect.top, behavior: 'auto' })
-          return
-        }
-      }
+  useEffect(() => () => window.cancelAnimationFrame(resetFrame.current), [])
 
-      if ((movement < 0 && atStart) || (movement > 0 && atEnd)) {
-        galleryCaptured.current = false
-        return
-      }
+  const moveBy = useCallback(direction => {
+    if (projectCount < 2 || moveInProgress.current) return
 
-      event.preventDefault()
-      scrollTarget.current = Math.max(0, Math.min(maximumScroll, scrollTarget.current + movement * 1.15))
-      if (scrollFrame.current) return
-      const easeScroll = () => {
-        const distance = scrollTarget.current - scroller.scrollLeft
-        if (Math.abs(distance) < 0.5) {
-          scroller.scrollLeft = scrollTarget.current
-          scrollFrame.current = null
-          return
-        }
-        scroller.scrollLeft += distance * 0.16
-        scrollFrame.current = window.requestAnimationFrame(easeScroll)
-      }
-      scrollFrame.current = window.requestAnimationFrame(easeScroll)
+    const nextActiveIndex = (activeIndexRef.current + direction + projectCount) % projectCount
+    activeIndexRef.current = nextActiveIndex
+    setActiveIndex(nextActiveIndex)
+
+    if (prefersReducedMotion) {
+      const nextRenderedIndex = nextActiveIndex + 1
+      renderedIndexRef.current = nextRenderedIndex
+      setTransitionEnabled(false)
+      setRenderedIndex(nextRenderedIndex)
+      return
     }
-    window.addEventListener('wheel', handleWheel, { passive: false })
-    return () => {
-      window.removeEventListener('wheel', handleWheel)
-      window.cancelAnimationFrame(scrollFrame.current)
-      galleryCaptured.current = false
-    }
-  }, [projects.length])
 
-  const onKeyDown = event => {
-    if (event.key === 'ArrowRight' || event.key === 'ArrowDown') { event.preventDefault(); goToProject(safeActiveIndex + 1) }
-    if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') { event.preventDefault(); goToProject(safeActiveIndex - 1) }
+    moveInProgress.current = true
+    const nextRenderedIndex = renderedIndexRef.current + direction
+    renderedIndexRef.current = nextRenderedIndex
+    setTransitionEnabled(true)
+    setRenderedIndex(nextRenderedIndex)
+  }, [prefersReducedMotion, projectCount])
+
+  useEffect(() => {
+    if (projectCount < 2 || isPaused || prefersReducedMotion) return undefined
+    const timer = window.setInterval(() => moveBy(1), 5600)
+    return () => window.clearInterval(timer)
+  }, [isPaused, moveBy, prefersReducedMotion, projectCount])
+
+  const onTrackTransitionEnd = event => {
+    if (event.target !== event.currentTarget || event.propertyName !== 'transform') return
+    const currentRenderedIndex = renderedIndexRef.current
+    const needsReset = currentRenderedIndex === 0 || currentRenderedIndex === projectCount + 1
+    if (!needsReset) {
+      moveInProgress.current = false
+      return
+    }
+
+    const resetIndex = currentRenderedIndex === 0 ? projectCount : 1
+    renderedIndexRef.current = resetIndex
+    setTransitionEnabled(false)
+    setRenderedIndex(resetIndex)
+    window.cancelAnimationFrame(resetFrame.current)
+    resetFrame.current = window.requestAnimationFrame(() => {
+      resetFrame.current = window.requestAnimationFrame(() => {
+        setTransitionEnabled(true)
+        moveInProgress.current = false
+      })
+    })
   }
 
+  const onKeyDown = event => {
+    if (event.key === 'ArrowRight' || event.key === 'ArrowDown') { event.preventDefault(); moveBy(1) }
+    if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') { event.preventDefault(); moveBy(-1) }
+  }
+
+  if (!projectCount) {
+    return <section id="work" className="showcase showcase-empty" aria-label="Selected projects"><p className="eyebrow">No projects have been added yet.</p></section>
+  }
+
+  const slides = isLooping ? [projects[projectCount - 1], ...projects, projects[0]] : projects
+
+  return <section id="work" className="showcase" aria-label="Selected projects">
+    <div className="showcase-stage" onKeyDown={onKeyDown} onMouseEnter={() => setIsPaused(true)} onMouseLeave={() => setIsPaused(false)} onFocus={() => setIsPaused(true)} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setIsPaused(false) }} tabIndex="0">
+      <div className="showcase-top"><p>Selected work</p><p>{String(safeActiveIndex + 1).padStart(2, '0')} / {String(projects.length).padStart(2, '0')}</p></div>
+      <div className={`showcase-track${transitionEnabled && !prefersReducedMotion ? ' is-animating' : ''}`} onTransitionEnd={onTrackTransitionEnd} style={{ transform: `translate3d(-${renderedIndex * 100}%, 0, 0)` }}>
+        {slides.map((project, index) => <article className="showcase-slide" aria-hidden={index !== renderedIndex} key={`${project.slug}-${index}`}>
+          <ProjectImage project={project} priority={isLooping ? index === 1 : index === 0} />
+          <div className="slide-shade" />
+          <div className="showcase-content"><p className="eyebrow">{project.type}</p><h2>{project.name}</h2><a href={`#project/${project.slug}`} tabIndex={index === renderedIndex ? 0 : -1}>Explore project <Arrow /></a></div>
+        </article>)}
+      </div>
+      <div className="showcase-controls"><button type="button" onClick={() => moveBy(-1)} aria-label="Previous project">←</button><button type="button" onClick={() => moveBy(1)} aria-label="Next project">→</button></div>
+    </div>
+  </section>
+}
+
+function ProjectShowcase({ projects }) {
   if (!projects.length) {
     return <section id="work" className="showcase showcase-empty" aria-label="Selected projects"><p className="eyebrow">No projects have been added yet.</p></section>
   }
 
-  return <section id="work" className="showcase" aria-label="Selected projects" ref={galleryRef}>
-    <div className="showcase-stage" onKeyDown={onKeyDown} tabIndex="0">
-      <div className="showcase-top"><p>Selected work</p><p>{String(safeActiveIndex + 1).padStart(2, '0')} / {String(projects.length).padStart(2, '0')}</p></div>
-      <div className="showcase-track" ref={scrollerRef}>
-        {projects.map((project, index) => <article className="showcase-slide" aria-hidden={index !== safeActiveIndex} key={project.slug}>
-          <ProjectImage project={project} priority={index === 0} />
-          <div className="slide-shade" />
-          <div className="showcase-content"><p className="eyebrow">{project.type}</p><h2>{project.name}</h2><a href={`#project/${project.slug}`} tabIndex={index === safeActiveIndex ? 0 : -1}>Explore project <Arrow /></a></div>
-        </article>)}
-      </div>
-      <div className="showcase-controls"><button type="button" onClick={() => goToProject(safeActiveIndex - 1)} disabled={safeActiveIndex === 0} aria-label="Previous project">←</button><button type="button" onClick={() => goToProject(safeActiveIndex + 1)} disabled={safeActiveIndex === projects.length - 1} aria-label="Next project">→</button></div>
-    </div>
-  </section>
+  return <ProjectCarousel key={projects.map(project => project.slug).join('|')} projects={projects} />
 }
 
 function ProjectDetail({ project, onBack }) {
