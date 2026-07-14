@@ -130,6 +130,7 @@ function ProjectCarousel({ projects }) {
   const renderedIndexRef = useRef(projectCount > 1 ? 1 : 0)
   const moveInProgress = useRef(false)
   const resetFrame = useRef(null)
+  const transitionTimer = useRef(null)
   const prefersReducedMotion = useReducedMotionPreference()
   const safeActiveIndex = Math.min(activeIndex, Math.max(projectCount - 1, 0))
   const isLooping = projectCount > 1
@@ -140,7 +141,33 @@ function ProjectCarousel({ projects }) {
     return () => window.cancelAnimationFrame(frame)
   }, [prefersReducedMotion])
 
-  useEffect(() => () => window.cancelAnimationFrame(resetFrame.current), [])
+  useEffect(() => () => {
+    window.cancelAnimationFrame(resetFrame.current)
+    window.clearTimeout(transitionTimer.current)
+  }, [])
+
+  const completeTransition = useCallback(() => {
+    window.clearTimeout(transitionTimer.current)
+    const currentRenderedIndex = renderedIndexRef.current
+    const needsReset = currentRenderedIndex === 0 || currentRenderedIndex === projectCount + 1
+
+    if (!needsReset) {
+      moveInProgress.current = false
+      return
+    }
+
+    const resetIndex = currentRenderedIndex === 0 ? projectCount : 1
+    renderedIndexRef.current = resetIndex
+    setTransitionEnabled(false)
+    setRenderedIndex(resetIndex)
+    window.cancelAnimationFrame(resetFrame.current)
+    resetFrame.current = window.requestAnimationFrame(() => {
+      resetFrame.current = window.requestAnimationFrame(() => {
+        setTransitionEnabled(true)
+        moveInProgress.current = false
+      })
+    })
+  }, [projectCount])
 
   const moveBy = useCallback(direction => {
     if (projectCount < 2 || moveInProgress.current) return
@@ -162,34 +189,19 @@ function ProjectCarousel({ projects }) {
     renderedIndexRef.current = nextRenderedIndex
     setTransitionEnabled(true)
     setRenderedIndex(nextRenderedIndex)
-  }, [prefersReducedMotion, projectCount])
+    window.clearTimeout(transitionTimer.current)
+    transitionTimer.current = window.setTimeout(completeTransition, 900)
+  }, [completeTransition, prefersReducedMotion, projectCount])
 
   useEffect(() => {
     if (projectCount < 2 || isPaused || prefersReducedMotion) return undefined
-    const timer = window.setInterval(() => moveBy(1), 5600)
-    return () => window.clearInterval(timer)
-  }, [isPaused, moveBy, prefersReducedMotion, projectCount])
+    const timer = window.setTimeout(() => moveBy(1), 3600)
+    return () => window.clearTimeout(timer)
+  }, [activeIndex, isPaused, moveBy, prefersReducedMotion, projectCount])
 
   const onTrackTransitionEnd = event => {
     if (event.target !== event.currentTarget || event.propertyName !== 'transform') return
-    const currentRenderedIndex = renderedIndexRef.current
-    const needsReset = currentRenderedIndex === 0 || currentRenderedIndex === projectCount + 1
-    if (!needsReset) {
-      moveInProgress.current = false
-      return
-    }
-
-    const resetIndex = currentRenderedIndex === 0 ? projectCount : 1
-    renderedIndexRef.current = resetIndex
-    setTransitionEnabled(false)
-    setRenderedIndex(resetIndex)
-    window.cancelAnimationFrame(resetFrame.current)
-    resetFrame.current = window.requestAnimationFrame(() => {
-      resetFrame.current = window.requestAnimationFrame(() => {
-        setTransitionEnabled(true)
-        moveInProgress.current = false
-      })
-    })
+    completeTransition()
   }
 
   const onKeyDown = event => {
@@ -204,7 +216,7 @@ function ProjectCarousel({ projects }) {
   const slides = isLooping ? [projects[projectCount - 1], ...projects, projects[0]] : projects
 
   return <section id="work" className="showcase" aria-label="Selected projects">
-    <div className="showcase-stage" onKeyDown={onKeyDown} onMouseEnter={() => setIsPaused(true)} onMouseLeave={() => setIsPaused(false)} onFocus={() => setIsPaused(true)} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setIsPaused(false) }} tabIndex="0">
+    <div className="showcase-stage" onKeyDown={onKeyDown} onPointerEnter={() => setIsPaused(true)} onPointerLeave={() => setIsPaused(false)} onFocus={() => setIsPaused(true)} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setIsPaused(false) }} tabIndex="0">
       <div className="showcase-top"><p>Selected work</p><p>{String(safeActiveIndex + 1).padStart(2, '0')} / {String(projects.length).padStart(2, '0')}</p></div>
       <div className={`showcase-track${transitionEnabled && !prefersReducedMotion ? ' is-animating' : ''}`} onTransitionEnd={onTrackTransitionEnd} style={{ transform: `translate3d(-${renderedIndex * 100}%, 0, 0)` }}>
         {slides.map((project, index) => <article className="showcase-slide" aria-hidden={index !== renderedIndex} key={`${project.slug}-${index}`}>
