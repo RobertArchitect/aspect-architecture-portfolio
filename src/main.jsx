@@ -124,6 +124,7 @@ function ProjectCarousel({ projects }) {
   const projectCount = projects.length
   const [activeIndex, setActiveIndex] = useState(0)
   const [renderedIndex, setRenderedIndex] = useState(() => projectCount > 1 ? 1 : 0)
+  const [trackTransform, setTrackTransform] = useState(() => `translate3d(-${projectCount > 1 ? 100 : 0}%, 0, 0)`)
   const [transitionEnabled, setTransitionEnabled] = useState(false)
   const activeIndexRef = useRef(0)
   const renderedIndexRef = useRef(projectCount > 1 ? 1 : 0)
@@ -132,6 +133,8 @@ function ProjectCarousel({ projects }) {
   const transitionTimer = useRef(null)
   const autoAdvanceTimer = useRef(null)
   const moveByRef = useRef(null)
+  const pausedRef = useRef(false)
+  const trackRef = useRef(null)
   const prefersReducedMotion = useReducedMotionPreference()
   const safeActiveIndex = Math.min(activeIndex, Math.max(projectCount - 1, 0))
   const isLooping = projectCount > 1
@@ -150,11 +153,12 @@ function ProjectCarousel({ projects }) {
 
   const queueAutoAdvance = useCallback((delay = 0) => {
     window.clearTimeout(autoAdvanceTimer.current)
-    if (projectCount < 2 || prefersReducedMotion) return
+    if (projectCount < 2 || prefersReducedMotion || pausedRef.current) return
     autoAdvanceTimer.current = window.setTimeout(() => moveByRef.current?.(1), delay)
   }, [prefersReducedMotion, projectCount])
 
   const completeTransition = useCallback(() => {
+    if (!moveInProgress.current) return
     window.clearTimeout(transitionTimer.current)
     const currentRenderedIndex = renderedIndexRef.current
     const needsReset = currentRenderedIndex === 0 || currentRenderedIndex === projectCount + 1
@@ -169,6 +173,7 @@ function ProjectCarousel({ projects }) {
     renderedIndexRef.current = resetIndex
     setTransitionEnabled(false)
     setRenderedIndex(resetIndex)
+    setTrackTransform(`translate3d(-${resetIndex * 100}%, 0, 0)`)
     window.cancelAnimationFrame(resetFrame.current)
     resetFrame.current = window.requestAnimationFrame(() => {
       resetFrame.current = window.requestAnimationFrame(() => {
@@ -192,6 +197,7 @@ function ProjectCarousel({ projects }) {
       renderedIndexRef.current = nextRenderedIndex
       setTransitionEnabled(false)
       setRenderedIndex(nextRenderedIndex)
+      setTrackTransform(`translate3d(-${nextRenderedIndex * 100}%, 0, 0)`)
       return
     }
 
@@ -200,6 +206,7 @@ function ProjectCarousel({ projects }) {
     renderedIndexRef.current = nextRenderedIndex
     setTransitionEnabled(true)
     setRenderedIndex(nextRenderedIndex)
+    setTrackTransform(`translate3d(-${nextRenderedIndex * 100}%, 0, 0)`)
     window.clearTimeout(transitionTimer.current)
     transitionTimer.current = window.setTimeout(completeTransition, 12200)
   }, [completeTransition, prefersReducedMotion, projectCount])
@@ -223,6 +230,33 @@ function ProjectCarousel({ projects }) {
     if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') { event.preventDefault(); moveBy(-1) }
   }
 
+  const pauseCarousel = () => {
+    pausedRef.current = true
+    window.clearTimeout(autoAdvanceTimer.current)
+    window.clearTimeout(transitionTimer.current)
+    if (!moveInProgress.current || !trackRef.current) return
+
+    const frozenTransform = window.getComputedStyle(trackRef.current).transform
+    if (!frozenTransform || frozenTransform === 'none') return
+
+    moveInProgress.current = false
+    setTransitionEnabled(false)
+    setTrackTransform(frozenTransform)
+
+    if (renderedIndexRef.current === 0) {
+      renderedIndexRef.current = projectCount
+      setRenderedIndex(projectCount)
+    } else if (renderedIndexRef.current === projectCount + 1) {
+      renderedIndexRef.current = 1
+      setRenderedIndex(1)
+    }
+  }
+
+  const resumeCarousel = () => {
+    pausedRef.current = false
+    if (!moveInProgress.current) queueAutoAdvance()
+  }
+
   if (!projectCount) {
     return <section id="work" className="showcase showcase-empty" aria-label="Selected projects"><p className="eyebrow">No projects have been added yet.</p></section>
   }
@@ -230,9 +264,9 @@ function ProjectCarousel({ projects }) {
   const slides = isLooping ? [projects[projectCount - 1], ...projects, projects[0]] : projects
 
   return <section id="work" className="showcase" aria-label="Selected projects">
-    <div className="showcase-stage" onKeyDown={onKeyDown} tabIndex="0">
+    <div className="showcase-stage" onKeyDown={onKeyDown} onPointerEnter={pauseCarousel} onPointerLeave={resumeCarousel} tabIndex="0">
       <div className="showcase-top"><p>Selected work</p><p>{String(safeActiveIndex + 1).padStart(2, '0')} / {String(projects.length).padStart(2, '0')}</p></div>
-      <div className={`showcase-track${transitionEnabled && !prefersReducedMotion ? ' is-animating' : ''}`} onTransitionEnd={onTrackTransitionEnd} style={{ transform: `translate3d(-${renderedIndex * 100}%, 0, 0)` }}>
+      <div className={`showcase-track${transitionEnabled && !prefersReducedMotion ? ' is-animating' : ''}`} onTransitionEnd={onTrackTransitionEnd} ref={trackRef} style={{ transform: trackTransform }}>
         {slides.map((project, index) => <article className="showcase-slide" aria-hidden={index !== renderedIndex} key={`${project.slug}-${index}`}>
           <ProjectImage project={project} priority={isLooping ? index === 1 : index === 0} />
           <div className="slide-shade" />
