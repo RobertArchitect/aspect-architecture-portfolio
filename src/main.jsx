@@ -124,13 +124,14 @@ function ProjectCarousel({ projects }) {
   const projectCount = projects.length
   const [activeIndex, setActiveIndex] = useState(0)
   const [renderedIndex, setRenderedIndex] = useState(() => projectCount > 1 ? 1 : 0)
-  const [isPaused, setIsPaused] = useState(false)
   const [transitionEnabled, setTransitionEnabled] = useState(false)
   const activeIndexRef = useRef(0)
   const renderedIndexRef = useRef(projectCount > 1 ? 1 : 0)
   const moveInProgress = useRef(false)
   const resetFrame = useRef(null)
   const transitionTimer = useRef(null)
+  const autoAdvanceTimer = useRef(null)
+  const moveByRef = useRef(null)
   const prefersReducedMotion = useReducedMotionPreference()
   const safeActiveIndex = Math.min(activeIndex, Math.max(projectCount - 1, 0))
   const isLooping = projectCount > 1
@@ -144,7 +145,14 @@ function ProjectCarousel({ projects }) {
   useEffect(() => () => {
     window.cancelAnimationFrame(resetFrame.current)
     window.clearTimeout(transitionTimer.current)
+    window.clearTimeout(autoAdvanceTimer.current)
   }, [])
+
+  const queueAutoAdvance = useCallback((delay = 0) => {
+    window.clearTimeout(autoAdvanceTimer.current)
+    if (projectCount < 2 || prefersReducedMotion) return
+    autoAdvanceTimer.current = window.setTimeout(() => moveByRef.current?.(1), delay)
+  }, [prefersReducedMotion, projectCount])
 
   const completeTransition = useCallback(() => {
     window.clearTimeout(transitionTimer.current)
@@ -153,6 +161,7 @@ function ProjectCarousel({ projects }) {
 
     if (!needsReset) {
       moveInProgress.current = false
+      queueAutoAdvance()
       return
     }
 
@@ -165,12 +174,14 @@ function ProjectCarousel({ projects }) {
       resetFrame.current = window.requestAnimationFrame(() => {
         setTransitionEnabled(true)
         moveInProgress.current = false
+        queueAutoAdvance()
       })
     })
-  }, [projectCount])
+  }, [projectCount, queueAutoAdvance])
 
   const moveBy = useCallback(direction => {
     if (projectCount < 2 || moveInProgress.current) return
+    window.clearTimeout(autoAdvanceTimer.current)
 
     const nextActiveIndex = (activeIndexRef.current + direction + projectCount) % projectCount
     activeIndexRef.current = nextActiveIndex
@@ -194,10 +205,13 @@ function ProjectCarousel({ projects }) {
   }, [completeTransition, prefersReducedMotion, projectCount])
 
   useEffect(() => {
-    if (projectCount < 2 || isPaused || prefersReducedMotion) return undefined
-    const timer = window.setTimeout(() => moveBy(1), 4800)
-    return () => window.clearTimeout(timer)
-  }, [activeIndex, isPaused, moveBy, prefersReducedMotion, projectCount])
+    moveByRef.current = moveBy
+  }, [moveBy])
+
+  useEffect(() => {
+    queueAutoAdvance(900)
+    return () => window.clearTimeout(autoAdvanceTimer.current)
+  }, [queueAutoAdvance])
 
   const onTrackTransitionEnd = event => {
     if (event.target !== event.currentTarget || event.propertyName !== 'transform') return
@@ -216,7 +230,7 @@ function ProjectCarousel({ projects }) {
   const slides = isLooping ? [projects[projectCount - 1], ...projects, projects[0]] : projects
 
   return <section id="work" className="showcase" aria-label="Selected projects">
-    <div className="showcase-stage" onKeyDown={onKeyDown} onPointerEnter={() => setIsPaused(true)} onPointerLeave={() => setIsPaused(false)} onFocus={() => setIsPaused(true)} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setIsPaused(false) }} tabIndex="0">
+    <div className="showcase-stage" onKeyDown={onKeyDown} tabIndex="0">
       <div className="showcase-top"><p>Selected work</p><p>{String(safeActiveIndex + 1).padStart(2, '0')} / {String(projects.length).padStart(2, '0')}</p></div>
       <div className={`showcase-track${transitionEnabled && !prefersReducedMotion ? ' is-animating' : ''}`} onTransitionEnd={onTrackTransitionEnd} style={{ transform: `translate3d(-${renderedIndex * 100}%, 0, 0)` }}>
         {slides.map((project, index) => <article className="showcase-slide" aria-hidden={index !== renderedIndex} key={`${project.slug}-${index}`}>
