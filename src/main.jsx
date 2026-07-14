@@ -201,7 +201,7 @@ function ProjectCarousel({ projects }) {
     setTransitionEnabled(true)
     setRenderedIndex(nextRenderedIndex)
     window.clearTimeout(transitionTimer.current)
-    transitionTimer.current = window.setTimeout(completeTransition, 3200)
+    transitionTimer.current = window.setTimeout(completeTransition, 12200)
   }, [completeTransition, prefersReducedMotion, projectCount])
 
   useEffect(() => {
