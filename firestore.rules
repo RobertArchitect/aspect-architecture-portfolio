@@ -6,7 +6,10 @@ service cloud.firestore {
     // client-side UI check.
     function isAdmin() {
       return request.auth != null
-        && request.auth.token.email in ['robertarch9@gmail.com'];
+        && request.auth.token.email in [
+          'robertarch9@gmail.com',
+          's.s.guyum@gmail.com'
+        ];
     }
 
     function isValidProject() {
