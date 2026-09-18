@@ -1,10 +1,9 @@
 import { initializeApp } from 'firebase/app'
 import { getAuth, GoogleAuthProvider } from 'firebase/auth'
 import { getFirestore } from 'firebase/firestore'
-import { getStorage } from 'firebase/storage'
 
 // Firebase web configuration identifies this public web client. It is not a
-// credential; Firestore and Storage Security Rules protect project data.
+// credential; Firestore Security Rules protect project data.
 const firebaseConfig = {
   apiKey: 'AIzaSyAePKUad4aarfgypHDYmOgTbJrmLUJgFLI',
   authDomain: 'aspectportfolio.firebaseapp.com',
@@ -19,7 +18,6 @@ const app = initializeApp(firebaseConfig)
 
 export const auth = getAuth(app)
 export const database = getFirestore(app)
-export const storage = getStorage(app)
 export const googleProvider = new GoogleAuthProvider()
 
 googleProvider.setCustomParameters({ prompt: 'select_account' })

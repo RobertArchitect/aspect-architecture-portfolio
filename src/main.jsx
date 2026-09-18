@@ -11,7 +11,6 @@ import {
 } from './projects'
 import {
   deleteProjectFromFirestore,
-  deleteProjectImages,
   firebaseErrorMessage,
   replaceProjectsInFirestore,
   subscribeToProjects,
@@ -370,7 +369,6 @@ function AdminPage({ projects, syncState, user, authError, setAuthError }) {
   const saveProject = async event => {
     event.preventDefault()
     const nextDraft = { ...draft, slug: slugify(draft.slug || draft.name), images: draft.images.filter(Boolean) }
-    const previousProject = projects.find(project => project.slug === editingSlug)
     const nextProjects = isEditing ? projects.map(project => project.slug === editingSlug ? nextDraft : project) : [...projects, nextDraft]
 
     setSaving(true)
@@ -378,8 +376,6 @@ function AdminPage({ projects, syncState, user, authError, setAuthError }) {
       const normalised = normaliseProjectDocument(nextProjects).projects
       const savedProject = normalised.find(project => project.slug === nextDraft.slug)
       await replaceProjectsInFirestore(normalised)
-      const removedImages = previousProject ? previousProject.images.filter(image => !savedProject.images.includes(image)) : []
-      await deleteProjectImages(removedImages)
       setEditingSlug(savedProject.slug)
       setDraft(savedProject)
       setError('')
@@ -429,7 +425,7 @@ function AdminPage({ projects, syncState, user, authError, setAuthError }) {
     {syncState.source === 'seed-needed' && <section className="admin-seed" aria-label="Seed Firestore"><p><strong>Firestore is empty.</strong> Seed the four existing projects once to make the public site read its data from the shared collection.</p><button className="admin-primary" type="button" onClick={seedExistingProjects} disabled={saving}>Seed original projects <Arrow /></button></section>}
     {syncState.error && <p className="admin-message" role="alert">{syncState.error}</p>}
     <section className="admin-toolbar" aria-label="Project administration actions"><button className="admin-primary" type="button" onClick={startNewProject} disabled={saving}>Add project <Arrow /></button></section>
-    <p className="admin-persistence">Every published edit is written to Cloud Firestore. Uploads are stored in Firebase Storage; no project changes are saved in this browser.</p>
+    <p className="admin-persistence">Every published edit is written to Cloud Firestore. Images are stored and delivered by Cloudinary; no project changes are saved in this browser.</p>
     <div className="admin-layout" aria-busy={saving}>
       <aside className="admin-project-list" aria-label="Projects"><div><p className="eyebrow">Projects</p><span>{projects.length}</span></div>{projects.length ? projects.map(project => <button className={project.slug === editingSlug ? 'active' : ''} type="button" onClick={() => selectProject(project)} aria-pressed={project.slug === editingSlug} key={project.slug}><small>{project.number}</small><strong>{project.name}</strong><em>{project.type}</em></button>) : <p className="admin-empty">No projects yet. Add one to begin.</p>}</aside>
       <section className="admin-editor" aria-live="polite">
@@ -437,7 +433,7 @@ function AdminPage({ projects, syncState, user, authError, setAuthError }) {
         <p className="admin-message" role={error ? 'alert' : 'status'}>{error || notice}</p>
         <form onSubmit={saveProject}>
           <div className="admin-fields"><label>Project header<input name="name" value={draft.name} onChange={updateField} placeholder="House of Light" required disabled={saving} /></label><label>Slug<input name="slug" value={draft.slug} onChange={updateField} placeholder="house-of-light" pattern="[a-z0-9\-]+" aria-describedby="slug-help" required={Boolean(draft.slug)} disabled={saving} /></label><p className="field-help" id="slug-help">Leave blank to create a slug from the header. Slugs must be unique.</p><label>Type / eyebrow<input name="type" value={draft.type} onChange={updateField} placeholder="Residential · Yerevan" required disabled={saving} /></label><label className="admin-field-wide">Project brief<textarea name="description" value={draft.description} onChange={updateField} rows="5" placeholder="Describe the project, its material, and intent." required disabled={saving} /></label><label>Completion<input name="completion" value={draft.completion} onChange={updateField} placeholder="2025" required disabled={saving} /></label><label>Scope<input name="scope" value={draft.scope} onChange={updateField} placeholder="Architecture · Interiors" required disabled={saving} /></label><label>Status<input name="status" value={draft.status} onChange={updateField} placeholder="Built" required disabled={saving} /></label></div>
-          <fieldset className="admin-images" disabled={saving}><legend>Project images</legend><p>Upload images directly to Firebase Storage, or add a full image URL or one of the original files from <code>public/images</code>.</p>{draft.images.map((image, index) => <div className="admin-image-row" key={`${index}-${image.slice(0, 24)}`}><label>Image {index + 1}<input value={image} onChange={event => updateImage(index, event.target.value)} placeholder="project-house-of-light.jpg" required={index === 0} /></label>{image && <img src={imageSource(image)} alt={`Preview ${index + 1}`} />}{draft.images.length > 1 && <button type="button" className="admin-image-remove" onClick={() => removeImage(index)} aria-label={`Remove image ${index + 1}`}>Remove</button>}</div>)}<div className="admin-image-actions"><button type="button" className="admin-button" onClick={addImageReference}>Add image URL</button><label className="admin-button upload-button">Upload image<input type="file" accept="image/*" multiple onChange={addUploadedImages} /></label></div></fieldset>
+          <fieldset className="admin-images" disabled={saving}><legend>Project images</legend><p>Upload JPG, PNG, or WebP images directly to Cloudinary (up to 10 MB each), or add a full image URL or one of the original files from <code>public/images</code>. Removing an image here removes it from the project, not from Cloudinary.</p>{draft.images.map((image, index) => <div className="admin-image-row" key={`${index}-${image.slice(0, 24)}`}><label>Image {index + 1}<input value={image} onChange={event => updateImage(index, event.target.value)} placeholder="project-house-of-light.jpg" required={index === 0} /></label>{image && <img src={imageSource(image)} alt={`Preview ${index + 1}`} />}{draft.images.length > 1 && <button type="button" className="admin-image-remove" onClick={() => removeImage(index)} aria-label={`Remove image ${index + 1}`}>Remove</button>}</div>)}<div className="admin-image-actions"><button type="button" className="admin-button" onClick={addImageReference}>Add image URL</button><label className="admin-button upload-button">Upload image<input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={addUploadedImages} /></label></div></fieldset>
           <div className="admin-form-actions"><button className="admin-primary" type="submit" disabled={saving}>{saving ? 'Publishing…' : isEditing ? 'Save changes' : 'Create project'} <Arrow /></button><button className="admin-button" type="button" onClick={startNewProject} disabled={saving}>Clear form</button></div>
         </form>
       </section>

@@ -13,9 +13,9 @@ Use `/admin` to open the project editor. The editor requires Google sign-in. Pub
 
 ## Firebase configuration
 
-The Firebase project is `aspectportfolio`. The browser configuration lives in `src/firebase.js`; Firebase web configuration is public by design. Its API key does not grant data access — the deployed rules in `firestore.rules` and `storage.rules` do.
+The Firebase project is `aspectportfolio`. The browser configuration lives in `src/firebase.js`; Firebase web configuration is public by design. Its API key does not grant data access — the deployed Firestore rules do.
 
-The allowlisted administrator is `robertarch9@gmail.com`. Firestore reads are public so portfolio visitors can see published work. Firestore writes and Storage uploads, changes, and deletions require that Google account.
+The allowlisted administrators are `robertarch9@gmail.com` and `s.s.guyum@gmail.com`. Firestore reads are public so portfolio visitors can see published work. Firestore writes require one of those Google accounts. Image uploads use Cloudinary's public client-side upload configuration (cloud name `fogield7`, preset `aspect-portfolio`); never add a Cloudinary API secret to this repository. The Cloudinary preset must remain unsigned and restrict uploads to JPG, JPEG, PNG, and WebP files no larger than 10 MB.
 
 Deploy the rules after signing in to the Firebase CLI:
 
@@ -28,7 +28,7 @@ In Firebase Authentication, enable Google and authorise `aspect.am`, `www.aspect
 
 ## First Firestore seed
 
-After the rules are deployed, sign in to `/admin` as `robertarch9@gmail.com` and select **Seed original projects**. This writes the existing four projects to Firestore while retaining their current static images. Later projects can upload images directly to Firebase Storage.
+After the rules are deployed, sign in to `/admin` as an allowlisted administrator and select **Seed original projects**. This writes the existing four projects to Firestore while retaining their current static images. Later projects can upload images directly to Cloudinary.
 
 ## Verify
 
